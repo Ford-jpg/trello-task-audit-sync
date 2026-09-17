@@ -1,0 +1,1 @@
+# Standard library (urllib) is used with zero external dependencies.
