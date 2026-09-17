@@ -66,8 +66,8 @@ def fetch_github_commits(owner, repo, since_iso, until_iso):
         return []
 
 
-def run():
-    list_title, since_date, until_date = get_week_info()
+def run(target_date=None):
+    list_title, since_date, until_date = get_week_info(target_date)
     since_iso = since_date.isoformat()
     until_iso = until_date.isoformat()
 
@@ -192,4 +192,22 @@ def run():
 
 
 if __name__ == "__main__":
-    run()
+    import argparse
+    parser = argparse.ArgumentParser(description="Sync GitHub commits to Trello for weekly audit")
+    parser.add_argument("--date", type=str, help="Target date in YYYY-MM-DD format (defaults to today)")
+    parser.add_argument("--week", type=int, choices=[1, 2, 3, 4], help="Specific week of the month (1-4)")
+    parser.add_argument("--month", type=int, default=None, help="Month number (1-12, defaults to current month)")
+    parser.add_argument("--year", type=int, default=None, help="Year (defaults to current year)")
+    args = parser.parse_args()
+
+    target_dt = None
+    if args.date:
+        target_dt = datetime.strptime(args.date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    elif args.week:
+        now = datetime.now(timezone.utc)
+        year = args.year or now.year
+        month = args.month or now.month
+        day_map = {1: 1, 2: 8, 3: 15, 4: 22}
+        target_dt = datetime(year, month, day_map[args.week], tzinfo=timezone.utc)
+
+    run(target_dt)
