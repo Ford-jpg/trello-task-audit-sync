@@ -42,5 +42,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GH_PAT_OR_TOKEN }}
           GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          DEVELOPER_NAME: ${{ secrets.DEVELOPER_NAME }}
+          TRELLO_LIST_PREFIX: ${{ secrets.TRELLO_LIST_PREFIX }}
+          GITHUB_REPOS: ${{ secrets.GITHUB_REPOS }}
+          GITHUB_AUTHOR: ${{ secrets.GITHUB_AUTHOR }}
         run: python src/sync_weekly.py
 

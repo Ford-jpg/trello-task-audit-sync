@@ -11,10 +11,12 @@ from config import (
     AUTH_PARAMS,
     CATEGORY_COLORS,
     DEVELOPER_NAME,
+    GITHUB_AUTHOR,
     GITHUB_TOKEN,
     REPOSITORIES,
     TRELLO_API_KEY,
     TRELLO_BOARD_ID,
+    TRELLO_LIST_PREFIX,
     TRELLO_TOKEN,
 )
 from categorizer import categorize_commit
@@ -45,7 +47,7 @@ def get_week_info(target_date=None):
         last_day = (next_month - timedelta(days=next_month.day)).day
         end_day = last_day
 
-    list_title = f"Johnford {month_name} {start_day}-{end_day} {year} (Week {week_num})"
+    list_title = f"{TRELLO_LIST_PREFIX} {month_name} {start_day}-{end_day} {year} (Week {week_num})"
     since_date = datetime(year, target_date.month, start_day, 0, 0, 0, tzinfo=timezone.utc)
     until_date = datetime(year, target_date.month, end_day, 23, 59, 59, tzinfo=timezone.utc)
 
@@ -54,6 +56,8 @@ def get_week_info(target_date=None):
 
 def fetch_github_commits(owner, repo, since_iso, until_iso):
     url = f"https://api.github.com/repos/{owner}/{repo}/commits?since={since_iso}&until={until_iso}&per_page=100"
+    if GITHUB_AUTHOR:
+        url += f"&author={urllib.parse.quote(GITHUB_AUTHOR)}"
     headers = {"User-Agent": "Trello-Task-Audit-Sync"}
     if GITHUB_TOKEN:
         headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
@@ -130,7 +134,7 @@ def sync_to_trello(activities, list_title):
 
         card_desc = (
             f"**Developer**: {DEVELOPER_NAME}\n"
-            f"**Repository**: [{item['repo']}](https://github.com/Ford-jpg/{item['repo']})\n"
+            f"**Repository**: [{item['repo']}](https://github.com/{item['owner']}/{item['repo']})\n"
             f"**Commit**: [{item['sha']}]({item['url']})\n"
             f"**Date**: {item['date']}\n"
             f"**Audit Category**: `{item['category']}`\n\n"
@@ -189,6 +193,7 @@ def run(target_date=None, skip_trello=False, skip_sheets=False):
             activities.append({
                 "title": title,
                 "category": category,
+                "owner": r["owner"],
                 "repo": r["repo"],
                 "sha": sha,
                 "date": commit_date,
