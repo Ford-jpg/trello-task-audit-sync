@@ -8,4 +8,4 @@ if [ -f .env ]; then
   export $(grep -v '^#' .env | xargs)
 fi
 
-python3 src/sync_weekly.py
+python3 src/sync_weekly.py "$@"

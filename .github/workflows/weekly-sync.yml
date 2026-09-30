@@ -1,27 +1,46 @@
-name: Weekly Trello Task Audit Sync
+name: Bi-Monthly Task Audit Sync (Trello & Google Sheets)
 
 on:
   schedule:
-    # Runs every Sunday at 16:00 UTC (12:00 AM PHT Monday)
-    - cron: '0 16 * * 0'
+    # 2:30 AM PHT (UTC+8) on the 16th of the month -> 18:30 UTC on the 15th
+    - cron: '30 18 15 * *'
+    # 2:30 AM PHT (UTC+8) on the 1st of the month -> 18:30 UTC on the last day of the month (28-31)
+    - cron: '30 18 28-31 * *'
   workflow_dispatch:
 
 jobs:
-  sync-trello:
+  sync-audit:
     runs-on: ubuntu-latest
     steps:
+      - name: Check if 1st or 16th in PHT (for scheduled runs)
+        id: date_check
+        run: |
+          PHT_DAY=$(TZ=Asia/Manila date +%d)
+          echo "Current PHT day: $PHT_DAY"
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$PHT_DAY" != "01" ] && [ "$PHT_DAY" != "16" ]; then
+            echo "should_run=false" >> $GITHUB_OUTPUT
+          else
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Checkout Repository
+        if: steps.date_check.outputs.should_run == 'true'
         uses: actions/checkout@v4
 
       - name: Set up Python
+        if: steps.date_check.outputs.should_run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Run Trello Sync
+      - name: Run Trello & Google Sheets Sync
+        if: steps.date_check.outputs.should_run == 'true'
         env:
           TRELLO_API_KEY: ${{ secrets.TRELLO_API_KEY }}
           TRELLO_TOKEN: ${{ secrets.TRELLO_TOKEN }}
           TRELLO_BOARD_ID: ${{ secrets.TRELLO_BOARD_ID }}
           GITHUB_TOKEN: ${{ secrets.GH_PAT_OR_TOKEN }}
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
         run: python src/sync_weekly.py
+

@@ -15,6 +15,18 @@ TRELLO_TOKEN = os.getenv("TRELLO_TOKEN", "")
 TRELLO_BOARD_ID = os.getenv("TRELLO_BOARD_ID", "")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 
+GOOGLE_SHEET_ID = os.getenv(
+    "GOOGLE_SHEET_ID", "16D9s8hfG4l01JXsOoF84k-Vkas11zcfGNYCaz55gr2Y"
+)
+GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "")
+GOOGLE_SERVICE_ACCOUNT_FILE = os.getenv(
+    "GOOGLE_SERVICE_ACCOUNT_FILE",
+    os.getenv(
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        os.path.join(os.path.dirname(__file__), "..", "service_account.json"),
+    ),
+)
+
 DEVELOPER_NAME = "Johnford Leoniel S. Balignot"
 REPOSITORIES = [
     {"owner": "Ford-jpg", "repo": "timegate_app"},
@@ -31,3 +43,4 @@ CATEGORY_COLORS = {
 }
 
 AUTH_PARAMS = f"key={TRELLO_API_KEY}&token={TRELLO_TOKEN}"
+

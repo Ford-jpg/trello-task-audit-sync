@@ -18,6 +18,7 @@ from config import (
     TRELLO_TOKEN,
 )
 from categorizer import categorize_commit
+from sheets_sync import sync_to_google_sheet
 
 
 def get_week_info(target_date=None):
@@ -48,7 +49,7 @@ def get_week_info(target_date=None):
     since_date = datetime(year, target_date.month, start_day, 0, 0, 0, tzinfo=timezone.utc)
     until_date = datetime(year, target_date.month, end_day, 23, 59, 59, tzinfo=timezone.utc)
 
-    return list_title, since_date, until_date
+    return list_title, since_date, until_date, week_num, target_date
 
 
 def fetch_github_commits(owner, repo, since_iso, until_iso):
@@ -66,46 +67,13 @@ def fetch_github_commits(owner, repo, since_iso, until_iso):
         return []
 
 
-def run(target_date=None):
-    list_title, since_date, until_date = get_week_info(target_date)
-    since_iso = since_date.isoformat()
-    until_iso = until_date.isoformat()
-
-    print(f"[*] Starting Weekly Sync for: {list_title}")
-    print(f"[*] Date Range: {since_iso} to {until_iso}")
-
-    activities = []
-    for r in REPOSITORIES:
-        commits = fetch_github_commits(r["owner"], r["repo"], since_iso, until_iso)
-        for c in commits:
-            parents = len(c.get("parents", []))
-            msg = c["commit"]["message"].strip()
-            if parents > 1 or msg.startswith("Merge ") or "chore(master): release" in msg:
-                continue
-
-            first_line = msg.split("\n")[0]
-            category = categorize_commit(msg)
-            sha = c["sha"][:7]
-            commit_date = c["commit"]["author"]["date"][:10]
-            html_url = c.get("html_url", f"https://github.com/{r['owner']}/{r['repo']}/commit/{sha}")
-
-            title = f"[{category}] {first_line}"
-            if len(title) > 120:
-                title = title[:117] + "..."
-
-            activities.append({
-                "title": title,
-                "category": category,
-                "repo": r["repo"],
-                "sha": sha,
-                "date": commit_date,
-                "url": html_url,
-                "desc": msg
-            })
-
-    print(f"[+] Found {len(activities)} substantive activities.")
+def sync_to_trello(activities, list_title):
     if not activities:
-        print("[!] No new activities found for this period. Completed.")
+        print("[!] No new activities found for Trello. Skipping Trello card creation.")
+        return
+
+    if not (TRELLO_API_KEY and TRELLO_TOKEN and TRELLO_BOARD_ID):
+        print("[!] Missing Trello credentials. Skipping Trello sync.")
         return
 
     # 1. Get or create Trello list
@@ -188,26 +156,112 @@ def run(target_date=None):
             print(f"  [{idx:02d}/{len(activities)}] Failed: {item['title'][:55]}... | {e}")
         time.sleep(0.12)
 
-    print(f"\n[✓] Sync complete! Uploaded {uploaded} new cards to '{list_title}'.")
+    print(f"\n[✓] Trello sync complete! Uploaded {uploaded} new cards to '{list_title}'.")
+
+
+def run(target_date=None, skip_trello=False, skip_sheets=False):
+    list_title, since_date, until_date, week_num, effective_date = get_week_info(target_date)
+    since_iso = since_date.isoformat()
+    until_iso = until_date.isoformat()
+
+    print(f"[*] Starting Weekly Sync for: {list_title}")
+    print(f"[*] Date Range: {since_iso} to {until_iso}")
+
+    activities = []
+    for r in REPOSITORIES:
+        commits = fetch_github_commits(r["owner"], r["repo"], since_iso, until_iso)
+        for c in commits:
+            parents = len(c.get("parents", []))
+            msg = c["commit"]["message"].strip()
+            if parents > 1 or msg.startswith("Merge ") or "chore(master): release" in msg:
+                continue
+
+            first_line = msg.split("\n")[0]
+            category = categorize_commit(msg)
+            sha = c["sha"][:7]
+            commit_date = c["commit"]["author"]["date"][:10]
+            html_url = c.get("html_url", f"https://github.com/{r['owner']}/{r['repo']}/commit/{sha}")
+
+            title = f"[{category}] {first_line}"
+            if len(title) > 120:
+                title = title[:117] + "..."
+
+            activities.append({
+                "title": title,
+                "category": category,
+                "repo": r["repo"],
+                "sha": sha,
+                "date": commit_date,
+                "url": html_url,
+                "desc": msg
+            })
+
+    print(f"[+] Found {len(activities)} substantive activities.")
+
+    if not skip_trello:
+        sync_to_trello(activities, list_title)
+
+    if not skip_sheets:
+        sync_to_google_sheet(activities, effective_date, week_num)
+
+
+PHT = timezone(timedelta(hours=8))
+
+
+def get_target_dates_for_schedule(now_pht=None):
+    """
+    Determines which week(s) to sync for the 1st and 16th bi-monthly schedule:
+    - On the 1st of the month: syncs Week 3 and Week 4 of the previous month.
+    - On the 16th of the month: syncs Week 1 and Week 2 of the current month.
+    - Any other day (manual run without flags): syncs the current week.
+    """
+    if now_pht is None:
+        now_pht = datetime.now(PHT)
+
+    if now_pht.day == 1:
+        prev_month_last_day = now_pht.replace(day=1) - timedelta(days=1)
+        y, m = prev_month_last_day.year, prev_month_last_day.month
+        return [
+            datetime(y, m, 15, tzinfo=timezone.utc),  # Week 3 of previous month
+            datetime(y, m, 22, tzinfo=timezone.utc),  # Week 4 of previous month
+        ]
+    elif now_pht.day == 16:
+        y, m = now_pht.year, now_pht.month
+        return [
+            datetime(y, m, 1, tzinfo=timezone.utc),   # Week 1 of current month
+            datetime(y, m, 8, tzinfo=timezone.utc),   # Week 2 of current month
+        ]
+    else:
+        return [now_pht.astimezone(timezone.utc)]
 
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Sync GitHub commits to Trello for weekly audit")
-    parser.add_argument("--date", type=str, help="Target date in YYYY-MM-DD format (defaults to today)")
+    parser = argparse.ArgumentParser(description="Sync GitHub commits to Trello and MPOR Google Sheet for audit")
+    parser.add_argument("--date", type=str, help="Target date in YYYY-MM-DD format")
     parser.add_argument("--week", type=int, choices=[1, 2, 3, 4], help="Specific week of the month (1-4)")
     parser.add_argument("--month", type=int, default=None, help="Month number (1-12, defaults to current month)")
     parser.add_argument("--year", type=int, default=None, help="Year (defaults to current year)")
+    parser.add_argument("--sheets-only", action="store_true", help="Only update the MPOR Google Sheet (skip Trello)")
+    parser.add_argument("--trello-only", action="store_true", help="Only update Trello (skip Google Sheets)")
     args = parser.parse_args()
 
-    target_dt = None
     if args.date:
-        target_dt = datetime.strptime(args.date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        target_dates = [datetime.strptime(args.date, "%Y-%m-%d").replace(tzinfo=timezone.utc)]
     elif args.week:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(PHT)
         year = args.year or now.year
         month = args.month or now.month
         day_map = {1: 1, 2: 8, 3: 15, 4: 22}
-        target_dt = datetime(year, month, day_map[args.week], tzinfo=timezone.utc)
+        target_dates = [datetime(year, month, day_map[args.week], tzinfo=timezone.utc)]
+    else:
+        target_dates = get_target_dates_for_schedule()
 
-    run(target_dt)
+    for dt in target_dates:
+        run(
+            dt,
+            skip_trello=args.sheets_only,
+            skip_sheets=args.trello_only,
+        )
+
+
