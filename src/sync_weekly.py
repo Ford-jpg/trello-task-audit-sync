@@ -55,9 +55,10 @@ def get_week_info(target_date=None):
 
 
 def fetch_github_commits(owner, repo, since_iso, until_iso):
-    url = f"https://api.github.com/repos/{owner}/{repo}/commits?since={since_iso}&until={until_iso}&per_page=100"
+    params = {"since": since_iso, "until": until_iso, "per_page": "100"}
     if GITHUB_AUTHOR:
-        url += f"&author={urllib.parse.quote(GITHUB_AUTHOR)}"
+        params["author"] = GITHUB_AUTHOR
+    url = f"https://api.github.com/repos/{owner}/{repo}/commits?{urllib.parse.urlencode(params)}"
     headers = {"User-Agent": "Trello-Task-Audit-Sync"}
     if GITHUB_TOKEN:
         headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
@@ -165,8 +166,8 @@ def sync_to_trello(activities, list_title):
 
 def run(target_date=None, skip_trello=False, skip_sheets=False):
     list_title, since_date, until_date, week_num, effective_date = get_week_info(target_date)
-    since_iso = since_date.isoformat()
-    until_iso = until_date.isoformat()
+    since_iso = since_date.strftime("%Y-%m-%dT%H:%M:%SZ")
+    until_iso = until_date.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     print(f"[*] Starting Weekly Sync for: {list_title}")
     print(f"[*] Date Range: {since_iso} to {until_iso}")
